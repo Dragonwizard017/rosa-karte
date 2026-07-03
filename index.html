@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Rosà – Interaktive Karte</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f4f1ec;
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+  #app { display: flex; flex-direction: column; height: 100%; }
+  header {
+    background: #2b2118;
+    color: #f4e9c9;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-bottom: 3px solid #c9a227;
+  }
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  header .sub {
+    font-size: 12px;
+    color: #cbbf9a;
+  }
+  #main {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+  #sidebar {
+    width: 300px;
+    min-width: 300px;
+    background: #fffdf8;
+    border-right: 1px solid #e2d9c4;
+    overflow-y: auto;
+    padding: 10px;
+  }
+  #sidebar h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #8a7a55;
+    margin: 10px 6px 6px;
+  }
+  .poi-card {
+    background: #fff9e8;
+    border: 1px solid #e8d99a;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: box-shadow 0.15s, transform 0.15s, background 0.15s;
+  }
+  .poi-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    transform: translateY(-1px);
+    background: #fff3cf;
+  }
+  .poi-card.active {
+    border-color: #c9a227;
+    background: #ffedb0;
+  }
+  .poi-name {
+    font-weight: 600;
+    font-size: 14.5px;
+    color: #3a2e1c;
+    margin-bottom: 4px;
+  }
+  .poi-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .poi-actions a, .poi-actions button {
+    font-size: 11.5px;
+    padding: 5px 9px;
+    border-radius: 6px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .btn-apple { background: #000; color: #fff; }
+  .btn-google { background: #4285F4; color: #fff; }
+  .btn-focus { background: #eee; color: #333; border: 1px solid #ccc; }
+  #map { flex: 1; }
+  .leaflet-popup-content-wrapper {
+    border-radius: 10px;
+  }
+  .popup-title { font-weight: 700; margin-bottom: 4px; font-size: 14px; }
+  .popup-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .popup-actions a {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #fff;
+  }
+  .popup-apple { background: #000; }
+  .popup-google { background: #4285F4; }
+
+  #locate-btn {
+    background: #c9a227;
+    color: #2b2118;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #locate-btn:hover { background: #ddb43a; }
+  #locate-btn:disabled { opacity: 0.6; cursor: default; }
+  .user-dot {
+    background: #4285F4;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    box-shadow: 0 0 0 4px rgba(66,133,244,0.3);
+  }
+  .status-msg {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2b2118;
+    color: #f4e9c9;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    z-index: 1000;
+    display: none;
+  }
+
+  @media (max-width: 720px) {
+    #main { flex-direction: column; }
+    #sidebar {
+      width: 100%;
+      min-width: 0;
+      max-height: 40vh;
+      border-right: none;
+      border-bottom: 1px solid #e2d9c4;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <h1>🗺️ Rosà – Interaktive Karte</h1>
+      <div class="sub">Scrollen &amp; zoomen, Orte anklicken, Route via Apple Maps oder Google Maps starten</div>
+    </div>
+    <button id="locate-btn" onclick="locateMe()">📍 Mein Standort</button>
+  </header>
+  <div id="main">
+    <div id="sidebar">
+      <h2>Markierte Orte</h2>
+      <div id="poi-list"></div>
+    </div>
+    <div id="map"></div>
+  </div>
+  <div id="status" class="status-msg"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+  // Ungefähre Koordinaten der gelb markierten Orte in Rosà (VI), Italien
+  const pois = [
+    { name: "Stadion", desc: "Stadio Comunale di Rosà", lat: 45.73530, lng: 11.75720 },
+    { name: "Turnhalle", desc: "Palestra Comunale Balbi", lat: 45.73230, lng: 11.75790 },
+    { name: "Ca' Dolfin, Festplatz", desc: "Palazzo Casale Dolfin", lat: 45.73115, lng: 11.75080 },
+    { name: "Rathaus", desc: "Municipio di Rosà, Piazza della Serenissima 1", lat: 45.73000, lng: 11.75970 },
+    { name: "Parco delle Rose", desc: "Park in Rosà", lat: 45.72890, lng: 11.76030 },
+    { name: "Dom Sant'Antonio", desc: "Chiesa (Duomo) Sant'Antonio, Rosà", lat: 45.72960, lng: 11.76230 },
+    { name: "Palazzo Cecchin", desc: "Palazzo Cecchin, Via Capitano Alessio", lat: 45.72880, lng: 11.76330 },
+    { name: "nach Bassano", desc: "Richtung Bassano del Grappa (Norden)", lat: 45.74400, lng: 11.76100 },
+    { name: "nach Cusinati", desc: "Richtung Cusinati (Süden)", lat: 45.71950, lng: 11.76650 }
+  ];
+
+  const map = L.map('map', { scrollWheelZoom: true }).setView([45.7300, 11.7600], 15);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap Mitwirkende'
+  }).addTo(map);
+
+  const markers = {};
+  const listEl = document.getElementById('poi-list');
+
+  function appleMapsUrl(poi) {
+    return `https://maps.apple.com/?daddr=${poi.lat},${poi.lng}&dirflg=d`;
+  }
+  function googleMapsUrl(poi) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${poi.lat},${poi.lng}`;
+  }
+
+  pois.forEach((poi, i) => {
+    const marker = L.marker([poi.lat, poi.lng]).addTo(map);
+    marker.bindPopup(`
+      <div class="popup-title">${poi.name}</div>
+      <div style="font-size:12px;color:#555;">${poi.desc}</div>
+      <div class="popup-actions">
+        <a class="popup-apple" href="${appleMapsUrl(poi)}" target="_blank">Apple Maps Route</a>
+        <a class="popup-google" href="${googleMapsUrl(poi)}" target="_blank">Google Maps Route</a>
+      </div>
+    `);
+    markers[i] = marker;
+
+    const card = document.createElement('div');
+    card.className = 'poi-card';
+    card.id = `card-${i}`;
+    card.innerHTML = `
+      <div class="poi-name">${poi.name}</div>
+      <div style="font-size:12px;color:#7a6f55;">${poi.desc}</div>
+      <div class="poi-actions">
+        <button class="btn-focus" onclick="focusPoi(${i})">Auf Karte zeigen</button>
+        <a class="btn-apple" href="${appleMapsUrl(poi)}" target="_blank">Apple Route</a>
+        <a class="btn-google" href="${googleMapsUrl(poi)}" target="_blank">Google Route</a>
+      </div>
+    `;
+    listEl.appendChild(card);
+  });
+
+  window.focusPoi = function(i) {
+    document.querySelectorAll('.poi-card').forEach(c => c.classList.remove('active'));
+    document.getElementById(`card-${i}`).classList.add('active');
+    const poi = pois[i];
+    map.flyTo([poi.lat, poi.lng], 17, { duration: 0.8 });
+    markers[i].openPopup();
+  };
+
+  // --- Eigener Standort ---
+  let userMarker = null;
+  let userAccuracyCircle = null;
+  let watchId = null;
+  const statusEl = document.getElementById('status');
+  const locateBtn = document.getElementById('locate-btn');
+
+  function showStatus(msg, autoHideMs) {
+    statusEl.textContent = msg;
+    statusEl.style.display = 'block';
+    if (autoHideMs) {
+      setTimeout(() => { statusEl.style.display = 'none'; }, autoHideMs);
+    }
+  }
+
+  window.locateMe = function() {
+    if (!navigator.geolocation) {
+      showStatus('Standortabfrage wird von diesem Browser nicht unterstützt.', 4000);
+      return;
+    }
+
+    // iOS/Edge (und generell WebKit) verlangen zwingend HTTPS (oder localhost)
+    const isSecure = window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost';
+    if (!isSecure) {
+      showStatus('Standort benötigt eine sichere Verbindung (https). Bitte die Karte über eine https-Adresse öffnen, z. B. via GitHub Pages.', 7000);
+      return;
+    }
+
+    locateBtn.disabled = true;
+    locateBtn.textContent = '📍 Suche Standort…';
+    showStatus('Standort wird ermittelt… Bitte im Freigabe-Dialog "Erlauben" antippen.');
+
+    let settled = false;
+
+    const onSuccess = (pos) => {
+      settled = true;
+      updateUserLocation(pos);
+      locateBtn.disabled = false;
+      locateBtn.textContent = '📍 Mein Standort';
+      showStatus('Standort gefunden.', 2500);
+
+      if (watchId === null) {
+        watchId = navigator.geolocation.watchPosition(
+          updateUserLocation,
+          (err) => console.warn('Watch-Fehler:', err.message),
+          { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+        );
+      }
+    };
+
+    const onError = (err) => {
+      locateBtn.disabled = false;
+      locateBtn.textContent = '📍 Mein Standort';
+
+      let msg = 'Standort konnte nicht ermittelt werden.';
+      if (err.code === err.PERMISSION_DENIED) {
+        msg = 'Standortzugriff verweigert. Auf dem iPhone: Einstellungen → Datenschutz & Sicherheit → Ortungsdienste → Edge → "Beim Verwenden der App" erlauben, sowie in Edge selbst unter den Website-Einstellungen.';
+      } else if (err.code === err.TIMEOUT) {
+        msg = 'Zeitüberschreitung bei der Standortsuche. Versuche es erneut oder wechsle an einen Ort mit besserem GPS-/WLAN-Empfang.';
+      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        msg = 'Standort momentan nicht verfügbar. Bitte GPS/WLAN aktivieren und erneut versuchen.';
+      }
+      showStatus(msg, 7000);
+
+      // Fallback: nach einem Timeout/Fehler mit geringerer Genauigkeit erneut versuchen
+      if (!settled && err.code !== err.PERMISSION_DENIED) {
+        navigator.geolocation.getCurrentPosition(onSuccess, () => {}, {
+          enableHighAccuracy: false,
+          timeout: 15000,
+          maximumAge: 30000
+        });
+      }
+    };
+
+    // iOS/Safari-WebKit (und damit Edge auf iPhone) reagiert oft besser mit etwas
+    // großzügigerem Timeout als Desktop-Browser
+    navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+      enableHighAccuracy: true,
+      timeout: 12000,
+      maximumAge: 0
+    });
+  };
+
+  function updateUserLocation(pos) {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    const acc = pos.coords.accuracy;
+
+    if (!userMarker) {
+      const userIcon = L.divIcon({
+        className: 'user-dot',
+        iconSize: [16, 16]
+      });
+      userMarker = L.marker([lat, lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
+      userMarker.bindPopup('📍 Du bist hier');
+      userAccuracyCircle = L.circle([lat, lng], {
+        radius: acc,
+        color: '#4285F4',
+        fillColor: '#4285F4',
+        fillOpacity: 0.12,
+        weight: 1
+      }).addTo(map);
+      map.flyTo([lat, lng], 16, { duration: 0.8 });
+    } else {
+      userMarker.setLatLng([lat, lng]);
+      userAccuracyCircle.setLatLng([lat, lng]);
+      userAccuracyCircle.setRadius(acc);
+    }
+  }
+</script>
+</body>
+</html>
